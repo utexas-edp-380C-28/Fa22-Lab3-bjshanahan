@@ -133,67 +133,116 @@ mu_x <- matrix(c(5, 10), nrow = 1, ncol = 2)
 # set st dev
 sd_x <- matrix(1:2, nrow = 2, ncol = 1)
 
-p_x <- list(n = n, cor = r12, mu_x = mu_x, sd_x = sigma_x)
+p_x <- list(n = n, cor = r12, mu_x = mu_x, sd_x = sd_x)
 
 param_rmvnorm <- param_translate(p_x)
 
-data_3a <- rmvnorm(param_rmvnorm$n, param_rmvnorm$mu, param_rmvnorm$Sigma)
+X <- rmvnorm(param_rmvnorm$n, param_rmvnorm$mu, param_rmvnorm$Sigma)
 
-x1 = data_3a[, 1]
-x2 = data_3a[, 2]
-X = cbind(x1, x2)
+
+set.seed(23921)
+
+x1 = X[, 1]
+x2 = X[, 2]
 b1 = 1
 b2 = 1
+beta = matrix(c(b1, b2), nrow = 2, ncol = 1)
 R2 = 0.6
 mu_y = 10
 sd_y = 5
 p_y <- list(X = X, b1 = b1, b2 = b2, R2 = R2, mu_y = mu_y, sd_y = sd_y)
 
-generate_y <- function(p_y) {
+generate_y_setR2 <- function(p_y) {
   B = matrix(c(p_y$b1, p_y$b2), ncol = 1)
+  b0 = mu_y - mu_x %*% B
   Sigma_x <- cov(p_y$X)
   sd_e <- sqrt( (t(B) %*% Sigma_x %*% B) %*% ((1 / R2) - 1) )
-  y = rnorm(n, X %*% B, sd_e)
+  y = rnorm(n, as.vector(b0) + X %*% B, sd_e)
 }
 
-set.seed(23921)
-
-y <- generate_y(p_y)
+y <- generate_y_setR2(p_y)
 
 solution3b <- produce_OLS_solution(y, X)
 
 diff_y_param <- list(mean = mean(y) - mu_y, sd = sd(y) - sd_y)
 
-#> produce_OLS_solution(data_3b, X)
-#Estimate                  SE          t_value           p_value
-#b0    0.06294727  0.0404683095833365 1.55547058359421 0.119837199875773
-#b1    0.98916088 0.00677235973269319 146.058526650088                 0
-#b2    0.99973586  0.0033740950999435 296.297476432644                 0
-#SD(e) 2.03641868                  NA               NA                NA
-#R2    0.59782931                  NA               NA                NA
+#> solution3b <- produce_OLS_solution(y, X)
+#> solution3b
+#Estimate                  SE           t_value p_value
+#b0    -4.9370527  0.0404683095833365 -121.997997586475       0
+#b1     0.9891609  0.0067723597326932  146.058526650129       0
+#b2     0.9997359 0.00337409509994351  296.297476432642       0
+#SD(e)  2.0364187                  NA                NA      NA
+#R2     0.5978293                  NA                NA      NA
 
 #> diff_y_param <- list(mean = mean(y) - mu_y, sd = sd(y) - sd_y)
 #> diff_y_param
 #$mean
-#[1] 4.99389
+#[1] 0.001649459
 
 #$sd
-#[1] -1.783684
+#[1] -1.78886
 
 
 set.seed(123782)
-S_x <- cov(X)
-S_xy <- cov(X, y)
-R_x <- cor(X)
-R_xy <- cor(X, y)
-R_yx <- cor(y, X)
-S_y <- var(y)
+x1 = X[, 1]
+x2 = X[, 2]
+rho_yx1 =  0.3
+rho_yx2 = -0.4
+mu_y = 10
+sd_y = 5
+param_y_3c <- list(X = X,
+                   mu_x = matrix(c(mean(X[,1]), mean(X[,2])), nrow = 1),
+                   rho_yx1 =  0.3,
+                   rho_yx2 = -0.4,
+                   mu_y = 10,
+                   sd_y = 5)
 
-beta <- crossprod(S_x, S_xy)
+generate_y_setRhoxy <- function(p_y) {
+  S_x = cov(X)
+  S_xy = matrix(c((rho_yx1 * sd(X[,1]) * sd_y), (rho_yx2 * sd(X[,2]) * sd_y) ) )
+  beta = solve(S_x) %*% S_xy
+  var_e = (sd_y ^ 2) - crossprod(beta, S_xy)
+  R_yx = matrix(c(rho_yx1 =  0.3, rho_yx2 = -0.4), nrow = 2, ncol = 1)
+  R_x = as.matrix(cor(X))
+  R_xy = t(R_yx)
+  R2 = R_xy %*% solve(R_x) %*% R_yx
+  b0 = mu_y - mu_x %*% beta
+  Sigma_x <- cov(p_y$X)
+  sd_e <- sqrt( (t(beta) %*% Sigma_x %*% beta) %*% ((1 / R2) - 1) )
+  y = rnorm(n, as.vector(b0) + X %*% beta, sd_e)
+}
 
-resid_var <- S_y - crossprod(beta, S_xy)
+y_margin_corr <- generate_y_setRhoxy(param_y_3c)
 
-R2 <- R_yx %*% R_x %*% R_xy
+solution3c <- produce_OLS_solution(y_margin_corr, X)
+
+diff_y_param_3c <- list(mean = mean(y_margin_corr) - mu_y, sd = sd(y_margin_corr) - sd_y)
+diff_y_param_3c
+
+# > solution3c
+# Estimate                  SE           t_value p_value
+# b0    11.9151171  0.0795430601701363  149.794551894501       0
+# b1     2.3209383  0.0133115077762783  174.355777041011       0
+# b2    -1.3531807 0.00663200050404578 -204.038092166062       0
+# SD(e)  4.0027116                  NA                NA      NA
+# R2     0.3575643                  NA                NA      NA
+#
+# > diff_y_param_3c
+# $mean
+# [1] -0.01271435
+#
+# $sd
+# [1] -0.006152551
+
+
+
+gen_data_setR2 <- function(n, p_x, p_y) {
+
+}
+
+
+gen_data_setRhoxy <-
 
 # shortcuts
 tcrossprod(X) = X %*% t(X)
